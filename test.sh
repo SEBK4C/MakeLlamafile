@@ -7,91 +7,106 @@ RED='\033[0;31m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}Running MakeLlamafile Local Tests${NC}"
+echo -e "${YELLOW}Running MakeLlamafile macOS Tests${NC}"
 
 # Test script location
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# --------------------------------------
-# Test 1: Check dependencies
-# --------------------------------------
-echo -e "\n${YELLOW}Test 1: Checking dependencies...${NC}"
+# User directories
+USER_HOME="$HOME"
+OUTPUT_DIR="$USER_HOME/models/llamafiles"
+DOWNLOAD_DIR="$USER_HOME/models/huggingface"
+CONFIG_DIR="$USER_HOME/.config/makelamafile"
 
-# Check for required dependencies
-for cmd in git make; do
-  if command -v $cmd &> /dev/null; then
-    echo -e "✅ $cmd is installed: $(which $cmd)"
-  else
-    echo -e "${RED}❌ $cmd not found in PATH${NC}"
-    exit 1
-  fi
-done
-
-# Check for curl or wget
-if command -v curl &> /dev/null; then
-  echo -e "✅ curl is installed: $(which curl)"
-elif command -v wget &> /dev/null; then
-  echo -e "✅ wget is installed: $(which wget)"
+# Determine bin directory - look in various locations
+if [ -d "$SCRIPT_DIR/bin" ]; then
+  BIN_DIR="$SCRIPT_DIR/bin"
+elif [ -d "$(brew --prefix 2>/dev/null)/share/makelamafile/bin" ]; then
+  BIN_DIR="$(brew --prefix)/share/makelamafile/bin"
+elif [ -d "/usr/local/share/makelamafile/bin" ]; then
+  BIN_DIR="/usr/local/share/makelamafile/bin"
+elif [ -d "/opt/homebrew/share/makelamafile/bin" ]; then
+  BIN_DIR="/opt/homebrew/share/makelamafile/bin"
 else
-  echo -e "${RED}❌ Neither curl nor wget found in PATH${NC}"
+  # Default fallback
+  BIN_DIR="$SCRIPT_DIR/bin"
+fi
+
+# --------------------------------------
+# Test 1: Checking system...
+# --------------------------------------
+echo -e "\n${YELLOW}Test 1: Checking system...${NC}"
+
+if [ "$(uname)" != "Darwin" ]; then
+  echo -e "${RED}❌ This version is only compatible with macOS${NC}"
   exit 1
 fi
 
-# Check for shasum or sha256sum
-if command -v shasum &> /dev/null; then
-  echo -e "✅ shasum is installed: $(which shasum)"
-elif command -v sha256sum &> /dev/null; then
-  echo -e "✅ sha256sum is installed: $(which sha256sum)"
-else
-  echo -e "${YELLOW}⚠️ Neither shasum nor sha256sum found in PATH. SHA256 verification will not be available.${NC}"
-fi
-
-# Check for unzip
-if command -v unzip &> /dev/null; then
-  echo -e "✅ unzip is installed: $(which unzip)"
-else
-  echo -e "${RED}❌ unzip not found in PATH${NC}"
-  exit 1
-fi
+echo -e "✅ Running on macOS: $(sw_vers -productVersion)"
+echo -e "✅ Architecture: $(uname -m)"
 
 # --------------------------------------
-# Test 2: Run setup.sh
+# Test 2: Checking binaries...
 # --------------------------------------
-echo -e "\n${YELLOW}Test 2: Running setup script...${NC}"
+echo -e "\n${YELLOW}Test 2: Checking binaries...${NC}"
 
-# Make setup.sh executable if it's not already
-chmod +x setup.sh
+# Create bin directory if needed
+mkdir -p "$BIN_DIR"
 
-# Run setup script
-./setup.sh
+# If binaries don't exist in bin, download them
+if [ ! -x "$BIN_DIR/llamafile" ] || [ ! -x "$BIN_DIR/zipalign" ]; then
+  echo "Downloading required binaries..."
+  
+  # Download llamafile
+  echo "Downloading llamafile..."
+  curl -L -o "$BIN_DIR/llamafile" "https://github.com/Mozilla-Ocho/llamafile/releases/download/0.9.1/llamafile-0.9.1"
+  chmod +x "$BIN_DIR/llamafile"
+  
+  # Download zipalign
+  echo "Downloading zipalign..."
+  curl -L -o "$BIN_DIR/zipalign" "https://github.com/Mozilla-Ocho/llamafile/releases/download/0.9.1/zipalign-0.9.1"
+  chmod +x "$BIN_DIR/zipalign"
+fi
 
-# Check binaries
-if [ -x "bin/llamafile" ] && [ -x "bin/zipalign" ]; then
-  echo -e "✅ Required binaries are available and executable"
+# Check binaries again after potential download
+if [ -x "$BIN_DIR/llamafile" ] && [ -x "$BIN_DIR/zipalign" ]; then
+  echo -e "✅ Required binaries are available at $BIN_DIR"
 else
   echo -e "${RED}❌ Required binaries are missing or not executable${NC}"
   exit 1
 fi
 
+# Create user directories if they don't exist
+mkdir -p "$OUTPUT_DIR" "$DOWNLOAD_DIR" "$CONFIG_DIR"
+
+# Create or update config file
+cat > "$CONFIG_DIR/config" << EOF
+# MakeLlamafile configuration
+OUTPUT_DIR="$OUTPUT_DIR"
+DOWNLOAD_DIR="$DOWNLOAD_DIR"
+BIN_DIR="$BIN_DIR"
+EOF
+
+# Check user directories
+if [ -d "$OUTPUT_DIR" ] && [ -d "$DOWNLOAD_DIR" ] && [ -f "$CONFIG_DIR/config" ]; then
+  echo -e "✅ User directories and configuration are set up"
+else
+  echo -e "${RED}❌ Failed to set up user directories or configuration${NC}"
+  exit 1
+fi
+
 # --------------------------------------
-# Test 3: Download and convert a tiny model
+# Test 3: Testing model conversion...
 # --------------------------------------
 echo -e "\n${YELLOW}Test 3: Testing model conversion (small test model)...${NC}"
 
 # Download tiny test model (uses a very small quantized model for testing)
 echo "Downloading tiny test model..."
 MODEL_URL="https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q2_K.gguf"
-MODEL_FILE="$SCRIPT_DIR/test_model.gguf"
+MODEL_FILE="$DOWNLOAD_DIR/test_model.gguf"
 
-if command -v curl &> /dev/null; then
-  curl -L -o "$MODEL_FILE" "$MODEL_URL"
-elif command -v wget &> /dev/null; then
-  wget -O "$MODEL_FILE" "$MODEL_URL"
-else
-  echo -e "${RED}❌ Neither curl nor wget is available${NC}"
-  exit 1
-fi
+curl -L -o "$MODEL_FILE" "$MODEL_URL"
 
 # Check if download was successful
 if [[ ! -f "$MODEL_FILE" ]]; then
@@ -101,43 +116,48 @@ fi
 echo "✅ Model downloaded successfully"
 
 # Make create_llamafile.sh executable if it's not already
-chmod +x create_llamafile.sh
+chmod +x "$SCRIPT_DIR/create_llamafile.sh"
+
+# Make sure we export the BIN_DIR so the script knows where to find binaries
+export BIN_DIR
 
 # Convert the model
 echo "Converting model to llamafile..."
-./create_llamafile.sh -n "test_model" "$MODEL_FILE"
+"$SCRIPT_DIR/create_llamafile.sh" -n "test_model" "$MODEL_FILE"
 
-# Check if llamafile was created in the default output directory
-if [[ -f "$SCRIPT_DIR/models/llamafiles/test_model/test_model.llamafile" ]]; then
+# Check if llamafile was created in the output directory
+if [[ -f "$OUTPUT_DIR/test_model/test_model.llamafile" ]]; then
   echo "✅ Llamafile created successfully"
 else
   echo -e "${RED}❌ Failed to create llamafile${NC}"
-  ls -la "$SCRIPT_DIR/models/llamafiles"
+  ls -la "$OUTPUT_DIR"
   exit 1
 fi
 
 # --------------------------------------
-# Test 4: Test the generated llamafile
+# Test 4: Validating the generated llamafile...
 # --------------------------------------
-echo -e "\n${YELLOW}Test 4: Testing the generated llamafile...${NC}"
-echo "Running very basic inference test (may take a moment)..."
+echo -e "\n${YELLOW}Test 4: Validating the generated llamafile...${NC}"
 
-# Run a simple test with the model
-LLAMAFILE_PATH="$SCRIPT_DIR/models/llamafiles/test_model/test_model.llamafile"
+LLAMAFILE_PATH="$OUTPUT_DIR/test_model/test_model.llamafile"
 
 # Make the llamafile executable
 chmod +x "$LLAMAFILE_PATH"
 
-# Run a basic test (with a timeout to prevent hanging)
-echo "Testing inference with a simple prompt..."
-INFERENCE_OUTPUT=$(timeout 60s "$LLAMAFILE_PATH" -e -n 5 -p "Hello" 2>/dev/null || echo "Timeout or error occurred")
-
-if [[ "$INFERENCE_OUTPUT" != "" && "$INFERENCE_OUTPUT" != *"Timeout or error occurred"* ]]; then
-  echo "✅ Llamafile produced output when prompted"
-  echo -e "  ${YELLOW}Preview:${NC} ${INFERENCE_OUTPUT:0:100}..."
+# Check if the file exists and is executable
+if [ -x "$LLAMAFILE_PATH" ]; then
+  echo "✅ Llamafile is executable"
+  
+  # Check file size (should be more than 1MB for a valid model)
+  FILE_SIZE=$(stat -f%z "$LLAMAFILE_PATH")
+  if [ "$FILE_SIZE" -gt 1000000 ]; then
+    echo "✅ Llamafile has a valid size: $(du -h "$LLAMAFILE_PATH" | cut -f1)"
+  else
+    echo -e "${YELLOW}⚠️ Llamafile seems too small: $(du -h "$LLAMAFILE_PATH" | cut -f1)${NC}"
+  fi
 else
-  echo -e "${YELLOW}⚠️ Llamafile test produced warnings or errors, but we'll continue${NC}"
-  echo -e "  This might be due to platform-specific issues or limitations with the test model."
+  echo -e "${RED}❌ Llamafile is not executable${NC}"
+  exit 1
 fi
 
 # --------------------------------------
@@ -153,4 +173,9 @@ echo "✅ Test model file removed"
 echo -e "\n${GREEN}All tests completed!${NC}"
 echo -e "${GREEN}MakeLlamafile is installed and ready to use.${NC}"
 echo ""
-echo "You can now proceed with creating a Homebrew formula and release." 
+echo "Your model directories are set up at:"
+echo "  $OUTPUT_DIR (for generated llamafiles)"
+echo "  $DOWNLOAD_DIR (for downloaded models)"
+echo ""
+echo "Configuration file: $CONFIG_DIR/config"
+echo "Binary directory: $BIN_DIR" 

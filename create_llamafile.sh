@@ -3,13 +3,26 @@ set -e
 
 # Constants
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUTPUT_DIR="$SCRIPT_DIR/models/llamafiles"
-DOWNLOAD_DIR="$SCRIPT_DIR/models/huggingface"
+
+# Default user directories
+USER_HOME="$HOME"
+OUTPUT_DIR="$USER_HOME/models/llamafiles"
+DOWNLOAD_DIR="$USER_HOME/models/huggingface"
+CONFIG_FILE="$USER_HOME/.config/makelamafile/config"
+
+# Default binary location (will be overridden by config if available)
+# This fallback is for running outside of Homebrew
+BIN_DIR="$SCRIPT_DIR/bin"
 
 # Try to load config file if it exists
-CONFIG_FILE="$SCRIPT_DIR/etc/makelamafile/config"
 if [ -f "$CONFIG_FILE" ]; then
   source "$CONFIG_FILE"
+fi
+
+# Check if we're on macOS
+if [ "$(uname)" != "Darwin" ]; then
+  echo "Error: This version is only compatible with macOS"
+  exit 1
 fi
 
 # Function to show usage information
@@ -37,14 +50,15 @@ download_file() {
   url="${url%?download=true}"
   
   echo "Downloading $output_file from $url..."
-  if command -v wget &> /dev/null; then
-    wget -O "$output_file" "$url"
-  elif command -v curl &> /dev/null; then
-    curl -fLo "$output_file" "$url"
-  else
-    echo "Error: Neither wget nor curl is available. Please install one of them."
-    exit 1
+  
+  # Determine if we should download to the default download directory
+  if [ "${output_file##*/}" = "${output_file}" ]; then
+    # No path specified, use download dir
+    mkdir -p "$DOWNLOAD_DIR"
+    output_file="$DOWNLOAD_DIR/$(basename "$output_file")"
   fi
+  
+  curl -L -o "$output_file" "$url"
   
   echo "Download complete!"
   echo "$output_file"
@@ -53,18 +67,7 @@ download_file() {
 # Function to calculate SHA256 hash
 calculate_hash() {
   local file="$1"
-  local hash
-  
-  if command -v sha256sum &> /dev/null; then
-    hash=$(sha256sum "$file" | cut -d ' ' -f 1)
-  elif command -v shasum &> /dev/null; then
-    hash=$(shasum -a 256 "$file" | cut -d ' ' -f 1)
-  else
-    echo "Warning: Unable to calculate SHA256 hash. Neither sha256sum nor shasum is available."
-    hash="SHA256 unavailable"
-  fi
-  
-  echo "$hash"
+  shasum -a 256 "$file" | cut -d ' ' -f 1
 }
 
 # Function to extract model information
@@ -72,14 +75,21 @@ extract_model_info() {
   local model_file="$1"
   
   # For TinyLLama, use hardcoded values
-  if [[ "$model_file" == *"TinyLLama"* ]]; then
-    echo "5M:2048:LLaMA"
+  if [[ "$model_file" == *"TinyLLama"* || "$model_file" == *"tinyllama"* ]]; then
+    echo "1.1B:2048:LLaMA"
     return
   fi
   
-  # For other models, try to extract info but return Unknown values if not possible
-  echo "Unknown:Unknown:Unknown"
-  return
+  # For other models, try to extract info from filename but return Unknown if not possible
+  if [[ "$model_file" == *"7b"* ]]; then
+    echo "7B:4096:Unknown"
+  elif [[ "$model_file" == *"13b"* ]]; then
+    echo "13B:4096:Unknown"
+  elif [[ "$model_file" == *"70b"* ]]; then
+    echo "70B:4096:Unknown"
+  else
+    echo "Unknown:Unknown:Unknown"
+  fi
 }
 
 # Function to generate a markdown documentation file
@@ -142,11 +152,9 @@ ${description}
 To run this llamafile:
 
 \`\`\`bash
-chmod +x ${output_file##*/}  # Only needed the first time (on Unix/Linux/macOS)
+chmod +x ${output_file##*/}  # Only needed the first time
 ./${output_file##*/}         # Start the web server
 \`\`\`
-
-On Windows, you may need to rename the file to add '.exe' to the end before running it.
 
 ### Command line options
 
@@ -185,53 +193,46 @@ build_llamafile() {
   local model_name="$2"
   local output_file="$3"
   
-  # Look for local binaries first, then in PATH
-  local llamafile=""
-  local zipalign=""
+  # Check for llamafile and zipalign in bin directory
+  local llamafile="$BIN_DIR/llamafile"
+  local zipalign="$BIN_DIR/zipalign"
   
-  # Check for local build in bin/ directory
-  if [ -f "$SCRIPT_DIR/bin/llamafile" ]; then
-    llamafile="$SCRIPT_DIR/bin/llamafile"
-    echo "Using local llamafile: $llamafile"
-  # Check for dependencies/llamafile/o/ directory
-  elif [ -f "$SCRIPT_DIR/dependencies/llamafile/o/llamafile" ]; then
-    llamafile="$SCRIPT_DIR/dependencies/llamafile/o/llamafile"
-    echo "Using locally built llamafile: $llamafile"
-  else
-    llamafile="$(command -v llamafile || echo "")"
-    if [ -n "$llamafile" ]; then
-      echo "Using system llamafile: $llamafile"
-    fi
+  # Additional search paths for binaries
+  if [ ! -x "$llamafile" ]; then
+    # Check in typical Homebrew paths
+    for dir in "/usr/local/bin" "/opt/homebrew/bin" "$(brew --prefix 2>/dev/null)/bin"; do
+      if [ -x "$dir/llamafile" ]; then
+        llamafile="$dir/llamafile"
+        break
+      fi
+    done
   fi
   
-  # Check for local build in bin/ directory
-  if [ -f "$SCRIPT_DIR/bin/zipalign" ]; then
-    zipalign="$SCRIPT_DIR/bin/zipalign"
-    echo "Using local zipalign: $zipalign"
-  # Check for dependencies/llamafile/o/ directory
-  elif [ -f "$SCRIPT_DIR/dependencies/llamafile/o/zipalign" ]; then
-    zipalign="$SCRIPT_DIR/dependencies/llamafile/o/zipalign"
-    echo "Using locally built zipalign: $zipalign"
-  else
-    zipalign="$(command -v zipalign || echo "")"
-    if [ -n "$zipalign" ]; then
-      echo "Using system zipalign: $zipalign"
-    fi
+  if [ ! -x "$zipalign" ]; then
+    # Check in typical Homebrew paths
+    for dir in "/usr/local/bin" "/opt/homebrew/bin" "$(brew --prefix 2>/dev/null)/bin"; do
+      if [ -x "$dir/zipalign" ]; then
+        zipalign="$dir/zipalign"
+        break
+      fi
+    done
   fi
   
-  if [ -z "$llamafile" ]; then
-    echo "Error: 'llamafile' executable not found locally or in PATH"
-    echo "Please run ./setup.sh to build and install llamafile locally"
+  if [ ! -x "$llamafile" ]; then
+    echo "Error: 'llamafile' executable not found"
+    echo "Please ensure MakeLlamafile is properly installed"
     exit 1
   fi
   
-  if [ -z "$zipalign" ]; then
-    echo "Error: 'zipalign' executable not found locally or in PATH"
-    echo "It should be built and installed along with llamafile by running ./setup.sh"
+  if [ ! -x "$zipalign" ]; then
+    echo "Error: 'zipalign' executable not found"
+    echo "Please ensure MakeLlamafile is properly installed"
     exit 1
   fi
   
   echo "Creating llamafile $output_file from $input_file..."
+  echo "Using llamafile binary: $llamafile"
+  echo "Using zipalign binary: $zipalign"
   
   # Create output directory
   mkdir -p "$(dirname "$output_file")"
