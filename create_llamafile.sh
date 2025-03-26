@@ -2,8 +2,15 @@
 set -e
 
 # Constants
-OUTPUT_DIR="models/llamafiles"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OUTPUT_DIR="$SCRIPT_DIR/models/llamafiles"
+DOWNLOAD_DIR="$SCRIPT_DIR/models/huggingface"
+
+# Try to load config file if it exists
+CONFIG_FILE="$SCRIPT_DIR/etc/makelamafile/config"
+if [ -f "$CONFIG_FILE" ]; then
+  source "$CONFIG_FILE"
+fi
 
 # Function to show usage information
 show_usage() {
@@ -11,7 +18,7 @@ show_usage() {
   echo
   echo "Options:"
   echo "  -h, --help                 Show this help message"
-  echo "  -o, --output-dir DIR       Set output directory (default: models/llamafiles)"
+  echo "  -o, --output-dir DIR       Set output directory (default: $OUTPUT_DIR)"
   echo "  -n, --name MODEL_NAME      Custom name for model (default: derived from filename)"
   echo "  -d, --description DESC     Custom description for the model"
   echo "  -t, --test                 Test the generated llamafile after creation"
@@ -182,30 +189,45 @@ build_llamafile() {
   local llamafile=""
   local zipalign=""
   
-  # Check for local build
-  if [ -f "./o/llamafile" ]; then
-    llamafile="./o/llamafile"
+  # Check for local build in bin/ directory
+  if [ -f "$SCRIPT_DIR/bin/llamafile" ]; then
+    llamafile="$SCRIPT_DIR/bin/llamafile"
+    echo "Using local llamafile: $llamafile"
+  # Check for dependencies/llamafile/o/ directory
+  elif [ -f "$SCRIPT_DIR/dependencies/llamafile/o/llamafile" ]; then
+    llamafile="$SCRIPT_DIR/dependencies/llamafile/o/llamafile"
     echo "Using locally built llamafile: $llamafile"
   else
     llamafile="$(command -v llamafile || echo "")"
+    if [ -n "$llamafile" ]; then
+      echo "Using system llamafile: $llamafile"
+    fi
   fi
   
-  if [ -f "./o/zipalign" ]; then
-    zipalign="./o/zipalign"
+  # Check for local build in bin/ directory
+  if [ -f "$SCRIPT_DIR/bin/zipalign" ]; then
+    zipalign="$SCRIPT_DIR/bin/zipalign"
+    echo "Using local zipalign: $zipalign"
+  # Check for dependencies/llamafile/o/ directory
+  elif [ -f "$SCRIPT_DIR/dependencies/llamafile/o/zipalign" ]; then
+    zipalign="$SCRIPT_DIR/dependencies/llamafile/o/zipalign"
     echo "Using locally built zipalign: $zipalign"
   else
     zipalign="$(command -v zipalign || echo "")"
+    if [ -n "$zipalign" ]; then
+      echo "Using system zipalign: $zipalign"
+    fi
   fi
   
   if [ -z "$llamafile" ]; then
-    echo "Error: 'llamafile' executable not found in local build or PATH"
-    echo "Please run 'make -j8 && sudo make install PREFIX=/usr/local' to build and install llamafile"
+    echo "Error: 'llamafile' executable not found locally or in PATH"
+    echo "Please run ./setup.sh to build and install llamafile locally"
     exit 1
   fi
   
   if [ -z "$zipalign" ]; then
-    echo "Error: 'zipalign' executable not found in local build or PATH"
-    echo "It should be built and installed along with llamafile"
+    echo "Error: 'zipalign' executable not found locally or in PATH"
+    echo "It should be built and installed along with llamafile by running ./setup.sh"
     exit 1
   fi
   
@@ -224,7 +246,6 @@ build_llamafile() {
 $(basename "$input_file")
 --host
 0.0.0.0
-...
 EOF
   
   # Use zipalign to embed the model and args
@@ -318,6 +339,7 @@ input_file=""
 
 # Check if input is a URL or local file
 if [[ "$input" == http* ]]; then
+  echo "Downloading from URL: $input"
   input_file="$(download_file "$input")"
   downloaded=true
 else
@@ -339,13 +361,7 @@ output_file="${output_dir}/${model_name}/${model_name}.llamafile"
 
 # Calculate SHA256 hash
 hash=$(calculate_hash "$input_file")
-
-# Get llamafile location for other functions
-if [ -f "./o/llamafile" ]; then
-  llamafile="./o/llamafile"
-else
-  llamafile="$(command -v llamafile || echo "")"
-fi
+echo "SHA256 Hash: $hash"
 
 # Extract model information
 model_info=$(extract_model_info "$input_file")

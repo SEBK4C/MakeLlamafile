@@ -172,3 +172,44 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Dependencies
+dependencies/
+
+# Generated binaries
+bin/
+models/
+
+# Downloaded models
+*.gguf
+*.bin
+*.safetensors
+
+# Generated llamafiles
+*.llamafile
+
+# Distribution / packaging
+dist/
+*.tar.gz
+
+# Temporary files
+.tmp/
+temp/
+tmp/
+
+# macOS metadata
+.DS_Store
+._.DS_Store
+._*
+
+# Test files
+test_model*
+
+# Logs
+*.log
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
