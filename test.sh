@@ -5,9 +5,10 @@ set -e
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}Running MakeLlamafile macOS Tests${NC}"
+echo -e "${YELLOW}Running MakeLlamafile Function Tests${NC}"
 
 # Test script location
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,6 +19,7 @@ USER_HOME="$HOME"
 OUTPUT_DIR="$USER_HOME/models/llamafiles"
 DOWNLOAD_DIR="$USER_HOME/models/huggingface"
 CONFIG_DIR="$USER_HOME/.config/makelamafile"
+TEST_OUTPUT_DIR="$OUTPUT_DIR/test_results"
 
 # Determine bin directory - look in various locations
 if [ -d "$SCRIPT_DIR/bin" ]; then
@@ -33,10 +35,30 @@ else
   BIN_DIR="$SCRIPT_DIR/bin"
 fi
 
+# Test tiny model could be in several locations - look for it
+TINY_MODEL=""
+POSSIBLE_PATHS=(
+  # From Homebrew installation
+  "$(brew --prefix 2>/dev/null)/share/makelamafile/models/TinyLLama-v0.1-5M-F16.gguf"
+  "/usr/local/share/makelamafile/models/TinyLLama-v0.1-5M-F16.gguf"
+  "/opt/homebrew/share/makelamafile/models/TinyLLama-v0.1-5M-F16.gguf"
+  # From the llamafile repository
+  "$SCRIPT_DIR/dependencies/llamafile/models/TinyLLama-v0.1-5M-F16.gguf"
+  # As a local file
+  "$SCRIPT_DIR/models/TinyLLama-v0.1-5M-F16.gguf"
+)
+
+for path in "${POSSIBLE_PATHS[@]}"; do
+  if [ -f "$path" ]; then
+    TINY_MODEL="$path"
+    break
+  fi
+done
+
 # --------------------------------------
-# Test 1: Checking system...
+# Test 1: Checking system and setup
 # --------------------------------------
-echo -e "\n${YELLOW}Test 1: Checking system...${NC}"
+echo -e "\n${BLUE}Test 1: Checking system and setup...${NC}"
 
 if [ "$(uname)" != "Darwin" ]; then
   echo -e "${RED}❌ This version is only compatible with macOS${NC}"
@@ -45,11 +67,6 @@ fi
 
 echo -e "✅ Running on macOS: $(sw_vers -productVersion)"
 echo -e "✅ Architecture: $(uname -m)"
-
-# --------------------------------------
-# Test 2: Checking binaries...
-# --------------------------------------
-echo -e "\n${YELLOW}Test 2: Checking binaries...${NC}"
 
 # Create bin directory if needed
 mkdir -p "$BIN_DIR"
@@ -78,7 +95,7 @@ else
 fi
 
 # Create user directories if they don't exist
-mkdir -p "$OUTPUT_DIR" "$DOWNLOAD_DIR" "$CONFIG_DIR"
+mkdir -p "$OUTPUT_DIR" "$DOWNLOAD_DIR" "$CONFIG_DIR" "$TEST_OUTPUT_DIR"
 
 # Create or update config file
 cat > "$CONFIG_DIR/config" << EOF
@@ -97,23 +114,28 @@ else
 fi
 
 # --------------------------------------
-# Test 3: Testing model conversion...
+# Test 2: Testing test model access
 # --------------------------------------
-echo -e "\n${YELLOW}Test 3: Testing model conversion (small test model)...${NC}"
+echo -e "\n${BLUE}Test 2: Testing access to the test model...${NC}"
 
-# Download tiny test model (uses a very small quantized model for testing)
-echo "Downloading tiny test model..."
-MODEL_URL="https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q2_K.gguf"
-MODEL_FILE="$DOWNLOAD_DIR/test_model.gguf"
-
-curl -L -o "$MODEL_FILE" "$MODEL_URL"
-
-# Check if download was successful
-if [[ ! -f "$MODEL_FILE" ]]; then
-  echo -e "${RED}❌ Failed to download test model${NC}"
-  exit 1
+# If we didn't find the test model, download a tiny one
+if [ -z "$TINY_MODEL" ]; then
+  echo "Test model not found in standard locations. Downloading test model..."
+  TINY_MODEL="$DOWNLOAD_DIR/TinyLLama-v0.1-5M-F16.gguf"
+  curl -L -o "$TINY_MODEL" "https://huggingface.co/ggml-org/models/resolve/main/TinyLLama-v0.1-5M-F16.gguf"
+  
+  if [ ! -f "$TINY_MODEL" ]; then
+    echo -e "${RED}❌ Failed to download test model${NC}"
+    exit 1
+  fi
 fi
-echo "✅ Model downloaded successfully"
+
+echo -e "✅ Using test model: $TINY_MODEL"
+
+# --------------------------------------
+# Test 3: Test basic conversion
+# --------------------------------------
+echo -e "\n${BLUE}Test 3: Testing basic conversion...${NC}"
 
 # Make create_llamafile.sh executable if it's not already
 chmod +x "$SCRIPT_DIR/create_llamafile.sh"
@@ -121,61 +143,126 @@ chmod +x "$SCRIPT_DIR/create_llamafile.sh"
 # Make sure we export the BIN_DIR so the script knows where to find binaries
 export BIN_DIR
 
-# Convert the model
-echo "Converting model to llamafile..."
-"$SCRIPT_DIR/create_llamafile.sh" -n "test_model" "$MODEL_FILE"
+# Convert the model with default options
+echo "Converting model to llamafile with default options..."
+"$SCRIPT_DIR/create_llamafile.sh" -n "TinyLLama-basic" "$TINY_MODEL"
 
-# Check if llamafile was created in the output directory
-if [[ -f "$OUTPUT_DIR/test_model/test_model.llamafile" ]]; then
-  echo "✅ Llamafile created successfully"
+# Check if llamafile was created
+if [[ -f "$OUTPUT_DIR/TinyLLama-basic/TinyLLama-basic.llamafile" && -x "$OUTPUT_DIR/TinyLLama-basic/TinyLLama-basic.llamafile" ]]; then
+  echo -e "✅ Basic conversion successful"
 else
-  echo -e "${RED}❌ Failed to create llamafile${NC}"
-  ls -la "$OUTPUT_DIR"
+  echo -e "${RED}❌ Basic conversion failed${NC}"
   exit 1
 fi
 
 # --------------------------------------
-# Test 4: Validating the generated llamafile...
+# Test 4: Test with custom output directory
 # --------------------------------------
-echo -e "\n${YELLOW}Test 4: Validating the generated llamafile...${NC}"
+echo -e "\n${BLUE}Test 4: Testing custom output directory...${NC}"
 
-LLAMAFILE_PATH="$OUTPUT_DIR/test_model/test_model.llamafile"
+# Convert with custom output directory
+echo "Converting model with custom output directory..."
+"$SCRIPT_DIR/create_llamafile.sh" -o "$TEST_OUTPUT_DIR" -n "TinyLLama-custom-dir" "$TINY_MODEL"
 
-# Make the llamafile executable
-chmod +x "$LLAMAFILE_PATH"
-
-# Check if the file exists and is executable
-if [ -x "$LLAMAFILE_PATH" ]; then
-  echo "✅ Llamafile is executable"
-  
-  # Check file size (should be more than 1MB for a valid model)
-  FILE_SIZE=$(stat -f%z "$LLAMAFILE_PATH")
-  if [ "$FILE_SIZE" -gt 1000000 ]; then
-    echo "✅ Llamafile has a valid size: $(du -h "$LLAMAFILE_PATH" | cut -f1)"
-  else
-    echo -e "${YELLOW}⚠️ Llamafile seems too small: $(du -h "$LLAMAFILE_PATH" | cut -f1)${NC}"
-  fi
+# Check if llamafile was created in the custom directory
+if [[ -f "$TEST_OUTPUT_DIR/TinyLLama-custom-dir/TinyLLama-custom-dir.llamafile" && -x "$TEST_OUTPUT_DIR/TinyLLama-custom-dir/TinyLLama-custom-dir.llamafile" ]]; then
+  echo -e "✅ Custom output directory test successful"
 else
-  echo -e "${RED}❌ Llamafile is not executable${NC}"
+  echo -e "${RED}❌ Custom output directory test failed${NC}"
+  exit 1
+fi
+
+# --------------------------------------
+# Test 5: Test with custom description
+# --------------------------------------
+echo -e "\n${BLUE}Test 5: Testing custom description...${NC}"
+
+# Convert with custom description
+echo "Converting model with custom description..."
+CUSTOM_DESC="This is a custom description for testing purposes"
+"$SCRIPT_DIR/create_llamafile.sh" -d "$CUSTOM_DESC" -n "TinyLLama-custom-desc" "$TINY_MODEL"
+
+# Check if README contains the custom description
+if grep -q "$CUSTOM_DESC" "$OUTPUT_DIR/TinyLLama-custom-desc/README.md"; then
+  echo -e "✅ Custom description test successful"
+else
+  echo -e "${RED}❌ Custom description test failed${NC}"
+  exit 1
+fi
+
+# --------------------------------------
+# Test 6: Test with test option
+# --------------------------------------
+echo -e "\n${BLUE}Test 6: Testing model testing option...${NC}"
+
+# Convert with test option
+echo "Converting model with test option..."
+TEST_OUTPUT=$("$SCRIPT_DIR/create_llamafile.sh" -t -n "TinyLLama-test-option" "$TINY_MODEL" 2>&1)
+
+# Check if test was performed
+if echo "$TEST_OUTPUT" | grep -q "Testing llamafile with prompt"; then
+  echo -e "✅ Test option successful"
+else
+  echo -e "${RED}❌ Test option failed${NC}"
+  exit 1
+fi
+
+# --------------------------------------
+# Test 7: Test with custom prompt
+# --------------------------------------
+echo -e "\n${BLUE}Test 7: Testing custom prompt...${NC}"
+
+# Convert with custom prompt
+CUSTOM_PROMPT="What is artificial intelligence?"
+TEST_OUTPUT=$("$SCRIPT_DIR/create_llamafile.sh" -p "$CUSTOM_PROMPT" -n "TinyLLama-custom-prompt" "$TINY_MODEL" 2>&1)
+
+# Check if the custom prompt was used
+if echo "$TEST_OUTPUT" | grep -q "$CUSTOM_PROMPT"; then
+  echo -e "✅ Custom prompt test successful"
+else
+  echo -e "${RED}❌ Custom prompt test failed${NC}"
+  exit 1
+fi
+
+# --------------------------------------
+# Final test: Check expected home directory llamafile
+# --------------------------------------
+echo -e "\n${BLUE}Final test: Creating ~/models/llamafiles/TinyLLama-v0.1-5M-F16.llamafile...${NC}"
+
+# Convert the model to the expected path
+"$SCRIPT_DIR/create_llamafile.sh" -n "TinyLLama-v0.1-5M-F16" "$TINY_MODEL"
+
+# Check if the expected llamafile exists
+if [[ -f "$OUTPUT_DIR/TinyLLama-v0.1-5M-F16/TinyLLama-v0.1-5M-F16.llamafile" && -x "$OUTPUT_DIR/TinyLLama-v0.1-5M-F16/TinyLLama-v0.1-5M-F16.llamafile" ]]; then
+  echo -e "✅ Final test successful!"
+  echo -e "   Created: $OUTPUT_DIR/TinyLLama-v0.1-5M-F16/TinyLLama-v0.1-5M-F16.llamafile"
+else
+  echo -e "${RED}❌ Final test failed${NC}"
   exit 1
 fi
 
 # --------------------------------------
 # Clean up
 # --------------------------------------
-echo -e "\n${YELLOW}Cleaning up...${NC}"
-rm -f "$MODEL_FILE"
-echo "✅ Test model file removed"
+echo -e "\n${YELLOW}Cleaning up test artifacts...${NC}"
+rm -rf "$TEST_OUTPUT_DIR"
+echo -e "✅ Test artifacts removed"
 
 # --------------------------------------
 # Final report
 # --------------------------------------
-echo -e "\n${GREEN}All tests completed!${NC}"
-echo -e "${GREEN}MakeLlamafile is installed and ready to use.${NC}"
+echo -e "\n${GREEN}All function tests completed successfully!${NC}"
+echo -e "${GREEN}MakeLlamafile is fully functional.${NC}"
 echo ""
 echo "Your model directories are set up at:"
 echo "  $OUTPUT_DIR (for generated llamafiles)"
 echo "  $DOWNLOAD_DIR (for downloaded models)"
 echo ""
-echo "Configuration file: $CONFIG_DIR/config"
-echo "Binary directory: $BIN_DIR" 
+echo "The test model has been converted and is available at:"
+echo "  $OUTPUT_DIR/TinyLLama-v0.1-5M-F16/TinyLLama-v0.1-5M-F16.llamafile"
+echo ""
+echo "You can try running it with:"
+echo "  $OUTPUT_DIR/TinyLLama-v0.1-5M-F16/TinyLLama-v0.1-5M-F16.llamafile"
+echo ""
+echo "Configuration: $CONFIG_DIR/config"
+echo "Binaries: $BIN_DIR" 

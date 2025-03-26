@@ -16,12 +16,34 @@ class MakeLlamafile < Formula
     # Create package-specific directories in the Homebrew prefix
     share_path = "#{prefix}/share/makelamafile"
     mkdir_p "#{share_path}/bin"
+    mkdir_p "#{share_path}/models"
     
     # Download binaries for llamafile tools
     system "curl", "-L", "-o", "#{share_path}/bin/llamafile", "https://github.com/Mozilla-Ocho/llamafile/releases/download/0.9.1/llamafile-0.9.1"
     system "curl", "-L", "-o", "#{share_path}/bin/zipalign", "https://github.com/Mozilla-Ocho/llamafile/releases/download/0.9.1/zipalign-0.9.1"
     chmod 0755, "#{share_path}/bin/llamafile"
     chmod 0755, "#{share_path}/bin/zipalign"
+    
+    # Check for existing test model in llamafile repository
+    test_model_path = ""
+    [
+      "dependencies/llamafile/models/TinyLLama-v0.1-5M-F16.gguf",
+      "models/TinyLLama-v0.1-5M-F16.gguf"
+    ].each do |path|
+      if File.exist?(path)
+        test_model_path = path
+        break
+      end
+    end
+    
+    # Copy or download the test model
+    if test_model_path.empty?
+      # Download test model (tiny size for quick testing)
+      system "curl", "-L", "-o", "#{share_path}/models/TinyLLama-v0.1-5M-F16.gguf", "https://huggingface.co/ggml-org/models/resolve/main/TinyLLama-v0.1-5M-F16.gguf"
+    else
+      # Copy existing test model
+      system "cp", test_model_path, "#{share_path}/models/TinyLLama-v0.1-5M-F16.gguf"
+    end
     
     # Create symlinks in bin directory
     bin.install_symlink "#{share_path}/bin/llamafile"
@@ -57,6 +79,14 @@ class MakeLlamafile < Formula
     system "chmod", "755", "#{models_dir}/huggingface"
     system "chmod", "755", "#{models_dir}/llamafiles"
     system "chmod", "644", "#{config_dir}/config"
+    
+    # Run an automatic test to create the TinyLLama-v0.1-5M-F16.llamafile
+    # This ensures a working llamafile is available immediately after installation
+    test_model = "#{prefix}/share/makelamafile/models/TinyLLama-v0.1-5M-F16.gguf"
+    if File.exist?(test_model)
+      system "#{bin}/makelamafile", "-n", "TinyLLama-v0.1-5M-F16", test_model
+      system "chmod", "+x", "#{models_dir}/llamafiles/TinyLLama-v0.1-5M-F16/TinyLLama-v0.1-5M-F16.llamafile"
+    end
   end
   
   def caveats
@@ -73,6 +103,12 @@ class MakeLlamafile < Formula
       
       Downloaded models will be stored in:
         #{user_home}/models/huggingface
+      
+      A test llamafile has been created at:
+        #{user_home}/models/llamafiles/TinyLLama-v0.1-5M-F16/TinyLLama-v0.1-5M-F16.llamafile
+        
+      You can run it with:
+        #{user_home}/models/llamafiles/TinyLLama-v0.1-5M-F16/TinyLLama-v0.1-5M-F16.llamafile
       
       For more information, run:
         makelamafile --help
@@ -93,5 +129,11 @@ class MakeLlamafile < Formula
     # Check if required binaries are available
     assert_predicate bin/"llamafile", :executable?
     assert_predicate bin/"zipalign", :executable?
+    
+    # Check if test model was downloaded
+    assert_predicate "#{prefix}/share/makelamafile/models/TinyLLama-v0.1-5M-F16.gguf", :file?
+    
+    # Check if the test llamafile was created
+    assert_predicate "#{user_home}/models/llamafiles/TinyLLama-v0.1-5M-F16/TinyLLama-v0.1-5M-F16.llamafile", :executable?
   end
 end 
