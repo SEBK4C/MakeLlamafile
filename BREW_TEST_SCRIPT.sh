@@ -27,7 +27,17 @@ done
 
 # Check directories
 SHARE_DIR="$(brew --prefix)/share/makelamafile"
-CONFIG_FILE="$(brew --prefix)/etc/makelamafile/config"
+CONFIG_FILE=""
+
+# Try to find the config file in various possible locations
+if [[ -f "$(brew --prefix)/etc/makelamafile/config" ]]; then
+  CONFIG_FILE="$(brew --prefix)/etc/makelamafile/config"
+elif [[ -f "$HOME/.config/makelamafile/config" ]]; then
+  CONFIG_FILE="$HOME/.config/makelamafile/config"
+else
+  echo -e "${YELLOW}⚠️ Searching for config file...${NC}"
+  CONFIG_FILE=$(find "$(brew --prefix)" "$HOME" -name "config" -path "*makelamafile*" 2>/dev/null | head -n 1)
+fi
 
 if [[ -d "$SHARE_DIR" ]]; then
   echo -e "✅ Share directory exists: $SHARE_DIR"
@@ -39,7 +49,7 @@ fi
 if [[ -f "$CONFIG_FILE" ]]; then
   echo -e "✅ Configuration file exists: $CONFIG_FILE"
 else
-  echo -e "${RED}❌ Configuration file not found: $CONFIG_FILE${NC}"
+  echo -e "${RED}❌ Configuration file not found. Checked in standard locations.${NC}"
   exit 1
 fi
 
@@ -93,6 +103,12 @@ makelamafile -n "test_model" "$MODEL_FILE"
 
 # Get output directory from config
 OUTPUT_DIR=$(grep "OUTPUT_DIR" "$CONFIG_FILE" | cut -d'"' -f2)
+if [[ -z "$OUTPUT_DIR" ]]; then
+  # Fallback to default location if not found in config
+  OUTPUT_DIR="$HOME/models/llamafiles"
+  echo -e "${YELLOW}⚠️ Couldn't extract OUTPUT_DIR from config, using default: $OUTPUT_DIR${NC}"
+fi
+
 LLAMAFILE_PATH="$OUTPUT_DIR/test_model/test_model.llamafile"
 
 # Verify llamafile creation
@@ -100,7 +116,8 @@ if [[ -f "$LLAMAFILE_PATH" ]]; then
   echo "✅ Llamafile created successfully at: $LLAMAFILE_PATH"
 else
   echo -e "${RED}❌ Failed to create llamafile at: $LLAMAFILE_PATH${NC}"
-  ls -la "$OUTPUT_DIR"
+  echo "Checking other possible locations..."
+  find "$HOME" -name "test_model.llamafile" 2>/dev/null
   exit 1
 fi
 

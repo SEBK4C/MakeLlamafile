@@ -45,12 +45,12 @@ This document provides a step-by-step guide for developing the Homebrew tap for 
 
 - [ ] Set up local tap:
   ```bash
-  brew tap-new yourusername/makelamafile --no-git
-  cp Formula/makelamafile.rb $(brew --repository)/Library/Taps/yourusername/homebrew-makelamafile/Formula/
+  brew tap-new sebk4c/makelamafile --no-git
+  cp Formula/makelamafile.rb $(brew --repository)/Library/Taps/sebk4c/homebrew-makelamafile/Formula/
   ```
 - [ ] Test installation from local tap:
   ```bash
-  brew install --verbose --debug yourusername/makelamafile/makelamafile
+  brew install --verbose --debug sebk4c/makelamafile/makelamafile
   ```
 - [ ] Verify installation structure:
   - [ ] Check binary locations
@@ -63,10 +63,10 @@ This document provides a step-by-step guide for developing the Homebrew tap for 
 
 ### 4. Publish and Distribution
 
-- [ ] Push repository to GitHub
+- [ ] Push repository to GitHub as `homebrew-makelamafile`
 - [ ] Test tap installation from GitHub:
   ```bash
-  brew tap yourusername/makelamafile
+  brew tap sebk4c/makelamafile
   brew install makelamafile
   ```
 - [ ] Create documentation in tap repository:
