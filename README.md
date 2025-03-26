@@ -32,7 +32,11 @@ MakeLlamafile simplifies the process of converting large language model files (G
 ### Using Homebrew
 
 ```bash
-brew install sebk4c/tap/makelamafile
+# Add the tap repository
+brew tap sebk4c/makellamafile
+
+# Install the formula
+brew install makellamafile
 ```
 
 After installation, MakeLlamafile will create the following directories in your home folder:
@@ -41,7 +45,7 @@ After installation, MakeLlamafile will create the following directories in your 
   ├── huggingface/    # For downloaded models
   └── llamafiles/     # For generated llamafiles
 
-~/.config/makelamafile/    # Configuration files
+~/.config/makellamafile/    # Configuration files
 ```
 
 ## Usage
@@ -51,19 +55,19 @@ After installation, MakeLlamafile will create the following directories in your 
 Convert a local GGUF file to a llamafile:
 
 ```bash
-makelamafile path/to/model.gguf
+makellamafile path/to/model.gguf
 ```
 
 Convert a model from Hugging Face:
 
 ```bash
-makelamafile https://huggingface.co/organization/model/resolve/main/model.gguf
+makellamafile https://huggingface.co/organization/model/resolve/main/model.gguf
 ```
 
 ### Options
 
 ```
-Usage: makelamafile [OPTIONS] GGUF_FILE_OR_URL
+Usage: makellamafile [OPTIONS] GGUF_FILE_OR_URL
 
 Options:
   -h, --help                 Show this help message
@@ -79,7 +83,6 @@ Options:
 After creating a llamafile, you can run it directly:
 
 ```bash
-chmod +x ~/models/llamafiles/model-name/model-name.llamafile
 ~/models/llamafiles/model-name/model-name.llamafile
 ```
 
@@ -90,24 +93,23 @@ Your web browser will open automatically to the chat interface (typically at htt
 When installed via Homebrew, the files are organized as follows:
 
 ```
-/usr/local/bin/makelamafile     # Main executable script
-/usr/local/bin/llamafile        # Symlink to Mozilla llamafile binary
-/usr/local/bin/zipalign         # Symlink to Mozilla zipalign binary
+/opt/homebrew/bin/makellamafile     # Main executable script (or /usr/local/bin on Intel Macs)
+/opt/homebrew/bin/llamafile        # Symlink to Mozilla llamafile binary
+/opt/homebrew/bin/zipalign         # Symlink to Mozilla zipalign binary
 
-/usr/local/share/makelamafile/  # Package data directory
+/opt/homebrew/share/makellamafile/  # Package data directory
   ├── bin/                      # Binary storage
   │   ├── llamafile             # Mozilla llamafile binary
   │   └── zipalign              # Mozilla zipalign binary
-  └── setup.sh                  # Setup script (run by the formula)
 
 ~/models/                       # User's model storage
   ├── huggingface/              # Downloads from Hugging Face
   └── llamafiles/               # Generated llamafiles and output
 
-~/.config/makelamafile/config   # User configuration file
+~/.config/makellamafile/config   # User configuration file
 ```
 
-On Apple Silicon Macs, Homebrew typically installs to `/opt/homebrew/` instead of `/usr/local/`.
+On Intel Macs, Homebrew typically installs to `/usr/local/` instead of `/opt/homebrew/`.
 
 ## License
 

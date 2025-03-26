@@ -8,10 +8,10 @@ To install MakeLlamafile via Homebrew, use the following commands:
 
 ```bash
 # Add the tap repository
-brew tap sebk4c/makelamafile
+brew tap sebk4c/makellamafile
 
 # Install the formula
-brew install makelamafile
+brew install makellamafile
 ```
 
 ## What Happens During Installation
@@ -19,11 +19,11 @@ brew install makelamafile
 When you run these commands, Homebrew performs the following steps:
 
 1. **Tap Repository Cloning**:
-   - Clones `https://github.com/sebk4c/homebrew-makelamafile` to your local Homebrew taps directory
+   - Clones `https://github.com/sebk4c/homebrew-makellamafile` to your local Homebrew taps directory
    - This repository must exist on GitHub with proper formula files
 
 2. **Formula Parsing**:
-   - Reads the Ruby formula file for `makelamafile`
+   - Reads the Ruby formula file for `makellamafile`
    - Analyzes dependencies and installation requirements
 
 3. **Dependency Installation**:
@@ -36,12 +36,12 @@ When you run these commands, Homebrew performs the following steps:
 
 5. **Installation to Homebrew Directories**:
    - Installs scripts to `$(brew --prefix)/bin/`
-   - Creates directories in `$(brew --prefix)/share/makelamafile/`
-   - Sets up documentation in `$(brew --prefix)/share/doc/makelamafile/`
+   - Creates directories in `$(brew --prefix)/share/makellamafile/`
+   - Sets up documentation in `$(brew --prefix)/share/doc/makellamafile/`
 
 6. **User Configuration Setup**:
    - Creates directories in `$HOME/models/`
-   - Sets up configuration in `$HOME/.config/makelamafile/`
+   - Sets up configuration in `$HOME/.config/makellamafile/`
    - Pre-converts a test model so it's immediately usable
 
 7. **Permission Setting**:
@@ -57,30 +57,34 @@ When you run these commands, Homebrew performs the following steps:
 
 If you see an error like:
 ```
-Cloning into '/opt/homebrew/Library/Taps/sebk4c/homebrew-tap'...
+Cloning into '/opt/homebrew/Library/Taps/sebk4c/homebrew-makellamafile'...
 remote: Repository not found.
-fatal: repository 'https://github.com/sebk4c/homebrew-tap/' not found
+fatal: repository 'https://github.com/sebk4c/homebrew-makellamafile/' not found
 ```
 
-**Problem**: Homebrew is looking for the wrong repository URL.
+**Problem**: The repository doesn't exist on GitHub.
 
-**Solution**: The correct command should use `sebk4c/makelamafile`, not `sebk4c/tap`:
-```bash
-brew tap sebk4c/makelamafile
-brew install makelamafile
-```
+**Solution**: For Homebrew taps, you need a GitHub repository with a specific naming convention:
 
-This looks for a repository at `https://github.com/sebk4c/homebrew-makelamafile`.
+1. The GitHub repository must be named `homebrew-makellamafile` (note the prefix "homebrew-")
+2. The tap command is `brew tap sebk4c/makellamafile` (without the "homebrew-" prefix)
 
-### Missing Repositories
+### GitHub Repository Naming Convention
 
-If the repository `sebk4c/homebrew-makelamafile` doesn't exist yet:
+Homebrew has a specific naming convention for tap repositories:
 
-1. It needs to be created on GitHub with:
-   - Repository name: `homebrew-makelamafile`
-   - Formula file: `Formula/makelamafile.rb`
+1. Create a GitHub repository with name: `homebrew-makellamafile`
+2. Inside this repository, create a directory structure with:
+   ```
+   Formula/
+     makellamafile.rb
+   ```
+3. When users run `brew tap sebk4c/makellamafile`, Homebrew looks for:
+   `https://github.com/sebk4c/homebrew-makellamafile`
 
-2. The formula should point to a valid release of the MakeLlamafile project.
+This follows Homebrew's standard convention where:
+- GitHub repo name: `homebrew-foo`
+- Tap command: `brew tap username/foo`
 
 ### Formula-Specific Issues
 
@@ -88,7 +92,7 @@ If installation fails even with the correct repository:
 
 1. Check Homebrew logs:
    ```bash
-   brew install --verbose makelamafile
+   brew install --verbose makellamafile
    ```
 
 2. Verify your system meets the requirements:
@@ -105,12 +109,12 @@ Once installed, you can:
 
 1. Run the help command:
    ```bash
-   makelamafile --help
+   makellamafile --help
    ```
 
 2. Convert a GGUF model:
    ```bash
-   makelamafile path/to/model.gguf
+   makellamafile path/to/model.gguf
    ```
 
 3. Run the pre-converted test model:

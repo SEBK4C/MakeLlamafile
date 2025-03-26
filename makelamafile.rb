@@ -1,8 +1,8 @@
-class MakeLlamafile < Formula
+class Makellamafile < Formula
   desc "Converter for turning LLM files into self-contained executables on macOS"
-  homepage "https://github.com/sebk4c/MakeLlamafile"
-  url "https://github.com/sebk4c/MakeLlamafile/archive/refs/tags/v1.0.0.tar.gz"
-  sha256 "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  homepage "https://github.com/sebk4c/homebrew-makellamafile"
+  url "https://github.com/Mozilla-Ocho/llamafile/archive/refs/tags/0.9.1.tar.gz"
+  sha256 "0ad51a6f48e9f711c6f00f4113ba14dbbac3cd4ef82a2fb7d9a01aa17e3a90de"
   license "MIT"
   
   depends_on "curl"
@@ -10,58 +10,111 @@ class MakeLlamafile < Formula
   depends_on :arch => :arm64
   
   def install
-    # Install scripts
-    bin.install "create_llamafile.sh" => "makelamafile"
-    
     # Create package-specific directories in the Homebrew prefix
-    share_path = "#{prefix}/share/makelamafile"
+    share_path = "#{prefix}/share/makellamafile"
     mkdir_p "#{share_path}/bin"
     mkdir_p "#{share_path}/models"
     
-    # Download binaries for llamafile tools
-    system "curl", "-L", "-o", "#{share_path}/bin/llamafile", "https://github.com/Mozilla-Ocho/llamafile/releases/download/0.9.1/llamafile-0.9.1"
-    system "curl", "-L", "-o", "#{share_path}/bin/zipalign", "https://github.com/Mozilla-Ocho/llamafile/releases/download/0.9.1/zipalign-0.9.1"
+    # Build llamafile and zipalign from source
+    system "make", "-C", ".", "o/llamafile"
+    system "make", "-C", ".", "o/zipalign"
+    
+    # Install the binaries to our share directory
+    cp "o/llamafile", "#{share_path}/bin/llamafile"
+    cp "o/zipalign", "#{share_path}/bin/zipalign"
     chmod 0755, "#{share_path}/bin/llamafile"
     chmod 0755, "#{share_path}/bin/zipalign"
     
-    # Check for existing test model in llamafile repository
-    test_model_path = ""
-    [
-      "dependencies/llamafile/models/TinyLLama-v0.1-5M-F16.gguf",
-      "models/TinyLLama-v0.1-5M-F16.gguf"
-    ].each do |path|
-      if File.exist?(path)
-        test_model_path = path
-        break
-      end
-    end
+    # Create a basic version of create_llamafile.sh script
+    File.write("#{share_path}/bin/create_llamafile.sh", <<~EOS)
+      #!/bin/bash
+      set -e
+      
+      # Default output directory
+      OUTPUT_DIR="$HOME/models/llamafiles"
+      
+      # Check for help
+      if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        echo "Usage: makellamafile [OPTIONS] GGUF_FILE_OR_URL"
+        echo
+        echo "Options:"
+        echo "  -h, --help                 Show this help message"
+        echo "  -o, --output-dir DIR       Set output directory (default: $OUTPUT_DIR)"
+        echo "  -n, --name MODEL_NAME      Custom name for model (default: derived from filename)"
+        echo "  -d, --description DESC     Custom description for the model"
+        echo "  -t, --test                 Test the generated llamafile after creation"
+        echo "  -p, --prompt PROMPT        Test prompt to use with the model"
+        exit 0
+      fi
+      
+      # Check if we have enough arguments
+      if [ $# -lt 1 ]; then
+        echo "Error: No input file specified"
+        echo "Run with --help for usage information"
+        exit 1
+      fi
+      
+      # Get the model file
+      MODEL_FILE="$1"
+      MODEL_NAME=$(basename "$MODEL_FILE" .gguf)
+      
+      # Create output directory
+      mkdir -p "$OUTPUT_DIR/$MODEL_NAME"
+      LLAMAFILE="$OUTPUT_DIR/$MODEL_NAME/$MODEL_NAME.llamafile"
+      
+      # Convert the model
+      echo "Creating llamafile from $MODEL_FILE..."
+      cp #{share_path}/bin/llamafile "$LLAMAFILE"
+      #{share_path}/bin/zipalign -j0 "$LLAMAFILE" "$MODEL_FILE"
+      chmod +x "$LLAMAFILE"
+      
+      echo "Created llamafile at: $LLAMAFILE"
+      echo "Run it with: $LLAMAFILE"
+    EOS
+    chmod 0755, "#{share_path}/bin/create_llamafile.sh"
     
-    # Copy or download the test model
-    if test_model_path.empty?
-      # Download test model (tiny size for quick testing)
-      system "curl", "-L", "-o", "#{share_path}/models/TinyLLama-v0.1-5M-F16.gguf", "https://huggingface.co/ggml-org/models/resolve/main/TinyLLama-v0.1-5M-F16.gguf"
-    else
-      # Copy existing test model
-      system "cp", test_model_path, "#{share_path}/models/TinyLLama-v0.1-5M-F16.gguf"
-    end
+    # Download a tiny test model
+    system "curl", "-L", "-o", "#{share_path}/models/TinyLLama-v0.1-5M-F16.gguf", 
+           "https://huggingface.co/ggml-org/models/resolve/main/TinyLLama-v0.1-5M-F16.gguf"
     
     # Create symlinks in bin directory
     bin.install_symlink "#{share_path}/bin/llamafile"
     bin.install_symlink "#{share_path}/bin/zipalign"
+    bin.install_symlink "#{share_path}/bin/create_llamafile.sh" => "makellamafile"
     
-    # Copy setup script to share directory
-    share_path.install "setup.sh"
+    # Create a simple README if needed
+    unless File.exist?("README.md")
+      File.write("#{share_path}/README.md", <<~EOS)
+        # MakeLlamafile
+        
+        A macOS-optimized converter for turning GGUF model files into self-contained executables.
+        
+        ## Usage
+        
+        ```bash
+        makellamafile path/to/model.gguf
+        ```
+        
+        For more information, run:
+        ```bash
+        makellamafile --help
+        ```
+      EOS
+      doc.install "#{share_path}/README.md"
+    else
+      doc.install "README.md"
+    end
     
-    # Copy README and other documentation
-    doc.install "README.md"
-    doc.install "LICENSE"
+    if File.exist?("LICENSE")
+      doc.install "LICENSE"
+    end
   end
   
   def post_install
     # Create user directories
     user_home = ENV["HOME"]
     models_dir = "#{user_home}/models"
-    config_dir = "#{user_home}/.config/makelamafile"
+    config_dir = "#{user_home}/.config/makellamafile"
     
     system "mkdir", "-p", "#{models_dir}/huggingface"
     system "mkdir", "-p", "#{models_dir}/llamafiles"
@@ -72,7 +125,7 @@ class MakeLlamafile < Formula
       # MakeLlamafile configuration
       OUTPUT_DIR="#{models_dir}/llamafiles"
       DOWNLOAD_DIR="#{models_dir}/huggingface"
-      BIN_DIR="#{prefix}/share/makelamafile/bin"
+      BIN_DIR="#{prefix}/share/makellamafile/bin"
     EOS
     
     # Ensure directories have correct permissions
@@ -82,9 +135,9 @@ class MakeLlamafile < Formula
     
     # Run an automatic test to create the TinyLLama-v0.1-5M-F16.llamafile
     # This ensures a working llamafile is available immediately after installation
-    test_model = "#{prefix}/share/makelamafile/models/TinyLLama-v0.1-5M-F16.gguf"
+    test_model = "#{prefix}/share/makellamafile/models/TinyLLama-v0.1-5M-F16.gguf"
     if File.exist?(test_model)
-      system "#{bin}/makelamafile", "-n", "TinyLLama-v0.1-5M-F16", test_model
+      system "#{bin}/makellamafile", "-n", "TinyLLama-v0.1-5M-F16", test_model
       system "chmod", "+x", "#{models_dir}/llamafiles/TinyLLama-v0.1-5M-F16/TinyLLama-v0.1-5M-F16.llamafile"
     end
   end
@@ -96,7 +149,7 @@ class MakeLlamafile < Formula
       MakeLlamafile has been installed!
       
       To convert a model file to a llamafile:
-        makelamafile path/to/model.gguf
+        makellamafile path/to/model.gguf
       
       Output will be saved to:
         #{user_home}/models/llamafiles
@@ -111,7 +164,7 @@ class MakeLlamafile < Formula
         #{user_home}/models/llamafiles/TinyLLama-v0.1-5M-F16/TinyLLama-v0.1-5M-F16.llamafile
       
       For more information, run:
-        makelamafile --help
+        makellamafile --help
       
       Note: This version is optimized for macOS on Apple Silicon (M1/M2/M3).
     EOS
@@ -119,7 +172,7 @@ class MakeLlamafile < Formula
   
   test do
     # Basic check that the executable runs
-    assert_match "Usage:", shell_output("#{bin}/makelamafile --help")
+    assert_match "Usage:", shell_output("#{bin}/makellamafile --help")
     
     # Check if the user's directories exist
     user_home = ENV["HOME"]
@@ -131,7 +184,7 @@ class MakeLlamafile < Formula
     assert_predicate bin/"zipalign", :executable?
     
     # Check if test model was downloaded
-    assert_predicate "#{prefix}/share/makelamafile/models/TinyLLama-v0.1-5M-F16.gguf", :file?
+    assert_predicate "#{prefix}/share/makellamafile/models/TinyLLama-v0.1-5M-F16.gguf", :file?
     
     # Check if the test llamafile was created
     assert_predicate "#{user_home}/models/llamafiles/TinyLLama-v0.1-5M-F16/TinyLLama-v0.1-5M-F16.llamafile", :executable?
